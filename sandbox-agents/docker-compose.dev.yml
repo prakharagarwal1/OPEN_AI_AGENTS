@@ -1,0 +1,51 @@
+# Sandbox Agents Development Docker Compose
+version: "3.8"
+
+services:
+  sandbox-agents-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sandbox-agents:dev
+    container_name: sandbox-agents-dev
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+      - "9231:9231"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+      - PORT=3003
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./src:/app/src
+      - ./logs:/app/logs
+      - sandbox-dev-data:/app/sandbox
+      - /app/node_modules
+    command: npx tsx watch src/index.ts
+    depends_on:
+      - redis
+    networks:
+      - sandbox-dev-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: sandbox-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-dev-data:/data
+    networks:
+      - sandbox-dev-network
+
+volumes:
+  redis-dev-data:
+  sandbox-dev-data:
+
+networks:
+  sandbox-dev-network:
+    driver: bridge

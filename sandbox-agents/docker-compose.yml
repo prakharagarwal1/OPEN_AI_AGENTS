@@ -1,0 +1,45 @@
+# Sandbox Agents Docker Compose
+version: "3.8"
+
+services:
+  sandbox-agents:
+    build: .
+    image: sandbox-agents:latest
+    container_name: sandbox-agents
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./logs:/app/logs
+      - sandbox-data:/app/sandbox
+    depends_on:
+      - redis
+    networks:
+      - sandbox-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: sandbox-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-} --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - sandbox-network
+
+volumes:
+  redis-data:
+  sandbox-data:
+
+networks:
+  sandbox-network:
+    driver: bridge

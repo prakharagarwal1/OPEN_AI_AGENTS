@@ -1,0 +1,54 @@
+# Chat Agents Docker Compose
+version: "3.8"
+
+services:
+  chat-agents:
+    build: .
+    image: chat-agents:latest
+    container_name: chat-agents
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+    networks:
+      - chat-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: chat-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-} --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - chat-network
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: chat-redis-commander
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD:-}
+    depends_on:
+      - redis
+    networks:
+      - chat-network
+
+volumes:
+  redis-data:
+
+networks:
+  chat-network:
+    driver: bridge

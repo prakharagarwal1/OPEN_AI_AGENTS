@@ -1,0 +1,47 @@
+# Voice Agents Development Docker Compose
+version: "3.8"
+
+services:
+  voice-agents-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: voice-agents:dev
+    container_name: voice-agents-dev
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+      - "9230:9230"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+      - /app/node_modules
+    command: npx tsx watch src/index.ts
+    depends_on:
+      - redis
+    networks:
+      - voice-dev-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: voice-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-dev-data:/data
+    networks:
+      - voice-dev-network
+
+volumes:
+  redis-dev-data:
+
+networks:
+  voice-dev-network:
+    driver: bridge

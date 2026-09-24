@@ -1,0 +1,47 @@
+# Chat Agents Development Docker Compose
+version: "3.8"
+
+services:
+  chat-agents-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chat-agents:dev
+    container_name: chat-agents-dev
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+      - "9229:9229"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+      - /app/node_modules
+    command: npx tsx watch src/index.ts
+    depends_on:
+      - redis
+    networks:
+      - chat-dev-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: chat-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-dev-data:/data
+    networks:
+      - chat-dev-network
+
+volumes:
+  redis-dev-data:
+
+networks:
+  chat-dev-network:
+    driver: bridge

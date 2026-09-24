@@ -1,0 +1,182 @@
+# Root Docker Compose - Orchestrates all 3 AI Agent projects
+# Usage: docker compose up --build
+# Each project reads its own .env file
+
+version: "3.8"
+
+networks:
+  chat-network:
+    driver: bridge
+  voice-network:
+    driver: bridge
+  sandbox-network:
+    driver: bridge
+
+volumes:
+  chat-redis-data:
+  voice-redis-data:
+  sandbox-redis-data:
+  chat-logs:
+  voice-logs:
+  sandbox-logs:
+  sandbox-data:
+
+# Shared Redis instances (one per project for isolation)
+services:
+  # ===================== CHAT AGENTS =====================
+  chat-redis:
+    image: redis:7-alpine
+    container_name: chat-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-} --appendonly yes
+    volumes:
+      - chat-redis-data:/data
+    networks:
+      - chat-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  chat-redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: chat-redis-commander
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:chat-redis:6379:0:${REDIS_PASSWORD:-}
+    depends_on:
+      - chat-redis
+    networks:
+      - chat-network
+
+  chat-agents:
+    build:
+      context: ./chat-agents
+      dockerfile: Dockerfile
+    image: chat-agents:latest
+    container_name: chat-agents
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./chat-agents/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - HOST=0.0.0.0
+    volumes:
+      - chat-logs:/app/logs
+    depends_on:
+      chat-redis:
+        condition: service_healthy
+    networks:
+      - chat-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r=>r.ok?process.exit(0):process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ===================== VOICE AGENTS =====================
+  voice-redis:
+    image: redis:7-alpine
+    container_name: voice-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-} --appendonly yes
+    volumes:
+      - voice-redis-data:/data
+    networks:
+      - voice-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  voice-agents:
+    build:
+      context: ./voice-agents
+      dockerfile: Dockerfile
+    image: voice-agents:latest
+    container_name: voice-agents
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+      - "8082:8082"
+    env_file:
+      - ./voice-agents/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - HOST=0.0.0.0
+    volumes:
+      - voice-logs:/app/logs
+    depends_on:
+      voice-redis:
+        condition: service_healthy
+    networks:
+      - voice-network
+    # Audio device access for voice processing
+    devices:
+      - /dev/snd:/dev/snd
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3002/health').then(r=>r.ok?process.exit(0):process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ===================== SANDBOX AGENTS =====================
+  sandbox-redis:
+    image: redis:7-alpine
+    container_name: sandbox-redis
+    restart: unless-stopped
+    ports:
+      - "6381:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-} --appendonly yes
+    volumes:
+      - sandbox-redis-data:/data
+    networks:
+      - sandbox-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  sandbox-agents:
+    build:
+      context: ./sandbox-agents
+      dockerfile: Dockerfile
+    image: sandbox-agents:latest
+    container_name: sandbox-agents
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    env_file:
+      - ./sandbox-agents/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+      - HOST=0.0.0.0
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - sandbox-logs:/app/logs
+      - sandbox-data:/app/sandbox
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - sandbox-redis
+    networks:
+      - sandbox-network
+    privileged: true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3003/health').then(r=>r.ok?process.exit(0):process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
